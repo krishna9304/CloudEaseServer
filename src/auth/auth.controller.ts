@@ -17,20 +17,21 @@ export class AuthController {
     @CurrentUser() user: User,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.authService.login(user, response);
+    await this.authService.login(user, response, 'User logged in');
   }
 
   @Get('logout')
   @UseGuards(JwtAuthGuard)
   async logout(@Res() response: Response) {
-    await this.authService.logout(response);
-    response.send(null);
+    this.authService.logout(response);
   }
 
   @Get('self')
   @UseGuards(JwtAuthGuard)
   async getSelf(@CurrentUser() user: User) {
-    const res = new APIresp('User authenticated succesfully', null, 200, user);
+    const res = new APIresp('User authenticated succesfully', null, 200, {
+      user,
+    });
     return res.getResponse();
   }
 }

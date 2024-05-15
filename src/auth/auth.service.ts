@@ -31,7 +31,6 @@ export class AuthService {
     const token = this.jwtService.sign(tokenPayload);
     const res = new ApiResponse(message, null, 201, {
       user,
-      token,
     });
     response
       .cookie('Authentication', token, {
@@ -43,9 +42,13 @@ export class AuthService {
   }
 
   logout(response: Response) {
-    response.cookie('Authentication', '', {
-      httpOnly: true,
-      expires: new Date(),
-    });
+    const res = new ApiResponse('User logged out', null, 201, null);
+    response
+      .cookie('Authentication', '', {
+        httpOnly: true,
+        expires: new Date(),
+      })
+      .status(200)
+      .send(res.getResponse());
   }
 }
