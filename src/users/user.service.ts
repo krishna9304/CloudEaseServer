@@ -15,14 +15,10 @@ export class UserService {
 
   async createUser(request: UserDto): Promise<User> {
     await this.validateCreateUserRequest(request);
-    const user = await this.userRepository.create({
+    let user = await this.userRepository.create({
       ...request,
       password: await bcrypt.hash(request.password, 10),
     } as User);
-
-    delete user.password;
-    delete user.metadata;
-
     return user;
   }
 
@@ -63,5 +59,14 @@ export class UserService {
         'User with similar details already exists.',
       );
     }
+  }
+
+  deleteUnwantedFields(user: User) {
+    delete user.password;
+    delete user.metadata;
+    delete user.created_at;
+    delete user.updated_at;
+    delete user._id;
+    return user;
   }
 }

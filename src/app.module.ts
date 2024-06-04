@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
+import { ProjectModule } from './project/project.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuthModule } from './auth/auth.module';
       envFilePath: '.env',
     }),
     AuthModule,
+    ProjectModule,
   ],
   controllers: [AppController],
   providers: [AppService, ConfigService],
