@@ -8,6 +8,9 @@ export class Project extends AbstractDocument {
   projectId: string;
 
   @Prop({ required: true })
+  userId: string;
+
+  @Prop({ required: true })
   projectName: string;
 
   @Prop({ required: true })

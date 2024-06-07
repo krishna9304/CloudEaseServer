@@ -21,7 +21,8 @@ export class ProjectController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  async createProject(@Body() reqBody: ProjectDto) {
+  async createProject(@Body() reqBody: ProjectDto, @CurrentUser() user: User) {
+    reqBody.userId = user.email;
     const { project, design } =
       await this.projectService.createProject(reqBody);
     const res = new ApiResponse('Project created.', null, 201, {
@@ -36,7 +37,9 @@ export class ProjectController {
   async updateProject(
     @Body() reqBody: Partial<ProjectDto>,
     @Param('projectId') projectId: string,
+    @CurrentUser() user: User,
   ) {
+    reqBody.userId = user.email;
     const project = await this.projectService.updateProject(projectId, reqBody);
     const res = new ApiResponse('Project updated.', null, 200, {
       project,
@@ -64,6 +67,7 @@ export class ProjectController {
     if (!query.limit || query.limit < 1) query.limit = 10;
 
     const projects = await this.projectService.getProjects(
+      user.email,
       parseInt(query.page),
       parseInt(query.limit),
     );
@@ -75,8 +79,11 @@ export class ProjectController {
 
   @Get(':projectId')
   @UseGuards(JwtAuthGuard)
-  async getProject(@Param('projectId') projectId: string) {
-    const project = await this.projectService.getProject(projectId);
+  async getProject(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: User,
+  ) {
+    const project = await this.projectService.getProject(projectId, user.email);
     const res = new ApiResponse(
       'Project Details for ' + projectId + ' fetched.',
       null,
@@ -90,8 +97,11 @@ export class ProjectController {
 
   @Get(':projectId/design')
   @UseGuards(JwtAuthGuard)
-  async getDesign(@Param('projectId') projectId: string) {
-    const design = await this.projectService.getDesign(projectId);
+  async getDesign(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: User,
+  ) {
+    const design = await this.projectService.getDesign(projectId, user.email);
     const res = new ApiResponse('Design Deatails.', null, 200, {
       design,
     });

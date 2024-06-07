@@ -8,6 +8,9 @@ export class ProjectDto {
   @IsEmpty()
   projectId: string;
 
+  @IsEmpty()
+  userId: string;
+
   @IsString()
   @IsNotEmpty()
   projectName: string;

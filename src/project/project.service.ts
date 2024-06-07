@@ -27,7 +27,10 @@ export class ProjectService {
     projectId: string,
     reqBody: Partial<ProjectDto>,
   ): Promise<Project> {
-    const projectExists = await this.projectRepository.exists({ projectId });
+    const projectExists = await this.projectRepository.exists({
+      projectId,
+      userId: reqBody.userId,
+    });
     if (!projectExists) {
       throw new NotFoundException('Project not found. Invalid projectId.');
     }
@@ -46,9 +49,13 @@ export class ProjectService {
     return design;
   }
 
-  async getProjects(page: number, limit: number): Promise<Project[]> {
+  async getProjects(
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<Project[]> {
     const projects = this.projectRepository.find(
-      {},
+      { userId },
       {
         page,
         limit,
@@ -58,8 +65,11 @@ export class ProjectService {
     return projects;
   }
 
-  async getProject(projectId: string): Promise<Project> {
-    const projectExists = await this.projectRepository.exists({ projectId });
+  async getProject(projectId: string, userId: string): Promise<Project> {
+    const projectExists = await this.projectRepository.exists({
+      projectId,
+      userId,
+    });
     if (!projectExists) {
       throw new NotFoundException('Project not found. Invalid projectId.');
     }
@@ -68,8 +78,11 @@ export class ProjectService {
     return project;
   }
 
-  async getDesign(projectId: string): Promise<Design> {
-    const projectExists = await this.projectRepository.exists({ projectId });
+  async getDesign(projectId: string, userId: string): Promise<Design> {
+    const projectExists = await this.projectRepository.exists({
+      projectId,
+      userId,
+    });
     if (!projectExists) {
       throw new NotFoundException('Project not found. Invalid projectId.');
     }
