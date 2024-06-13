@@ -1,0 +1,11 @@
+{
+  "azure": {
+    "compute": ["react-js", "node.js", "virtual-machine", "python-server"],
+    "apg": ["app-gateway"],
+    "firewall": ["firewall"],
+    "storage": ["storage-account"],
+    "cosmosdb": ["mongodb"],
+    "postgresql": ["postgres"],
+    "sqldb": ["sql-database"]
+  }
+}

@@ -2,6 +2,30 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { AbstractDocument } from 'src/database/abstract.schema';
 import { randomUUID } from 'crypto';
 
+export type AzureDetails = {
+  clientId: string;
+  clientSecret: string;
+  subscriptionId: string;
+  tenantId: string;
+  accessKey: string;
+  region: string;
+  backendResourceGroup: string;
+  backendStorageAccount: string;
+  backendContainer: string;
+  backendKey: string;
+};
+
+export type AwsDetails = {
+  accessKey: string;
+  secretKey: string;
+  region: string;
+};
+
+export enum CloudProvider {
+  Azure = 'azure',
+  Aws = 'aws',
+}
+
 @Schema({ versionKey: false })
 export class Project extends AbstractDocument {
   @Prop({ default: null })
@@ -15,6 +39,15 @@ export class Project extends AbstractDocument {
 
   @Prop({ required: true })
   projectDescription: string;
+
+  @Prop({ default: 'azure' })
+  cloudProvider: CloudProvider;
+
+  @Prop({ default: null, type: Object })
+  azureDetails: AzureDetails;
+
+  @Prop({ default: null, type: Object })
+  awsDetails: AwsDetails;
 
   @Prop({ default: [] })
   tags: Array<string>;

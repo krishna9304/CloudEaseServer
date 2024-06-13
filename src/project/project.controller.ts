@@ -107,4 +107,20 @@ export class ProjectController {
     });
     return res.getResponse();
   }
+
+  @Post(':projectId/publish')
+  @UseGuards(JwtAuthGuard)
+  async publishProject(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.projectService.publishProject(projectId, user.email);
+    const res = new ApiResponse(
+      'Pipeline started. Your project is being published...',
+      null,
+      200,
+      null,
+    );
+    return res.getResponse();
+  }
 }

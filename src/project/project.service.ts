@@ -4,18 +4,21 @@ import { ProjectDto } from './dto/project.dto';
 import { Project } from './schemas/project.schema';
 import { DesignRepository } from './repositories/design.repository';
 import { Design } from './schemas/design.schema';
+import { TerraformService } from 'src/terraform/services/terraform.service';
 
 @Injectable()
 export class ProjectService {
   constructor(
     private readonly projectRepository: ProjectRepository,
     private readonly designRepository: DesignRepository,
+    private readonly terraformService: TerraformService,
   ) {}
 
   async createProject(reqBody: ProjectDto): Promise<{
     project: Project;
     design: Design;
   }> {
+    
     const project = await this.projectRepository.create(reqBody);
     const design = await this.designRepository.create({
       projectId: project.projectId,
@@ -88,5 +91,19 @@ export class ProjectService {
     }
     const design = this.designRepository.findOne({ projectId });
     return design;
+  }
+
+  async publishProject(projectId: string, userId: string): Promise<void> {
+    const projectExists = await this.projectRepository.exists({
+      projectId,
+      userId,
+    });
+    if (!projectExists) {
+      throw new NotFoundException('Project not found. Invalid projectId.');
+    }
+    const project = await this.projectRepository.findOne({ projectId });
+    const design = await this.designRepository.findOne({ projectId });
+    const { nodes, edges } = design.components;
+    this.terraformService.prepareTerraformFiles(nodes, edges, project);
   }
 }

@@ -1,5 +1,16 @@
-import { IsArray, IsEmpty, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsEmpty,
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+} from 'class-validator';
 import { Types } from 'mongoose';
+import {
+  AwsDetails,
+  AzureDetails,
+  CloudProvider,
+} from '../schemas/project.schema';
 
 export class ProjectDto {
   @IsEmpty()
@@ -18,6 +29,14 @@ export class ProjectDto {
   @IsString()
   @IsNotEmpty()
   projectDescription: string;
+
+  @IsString()
+  @IsEnum(['azure', 'aws'])
+  cloudProvider: CloudProvider;
+
+  azureDetails: AzureDetails;
+
+  awsDetails: AwsDetails;
 
   @IsArray()
   tags: Array<string>;

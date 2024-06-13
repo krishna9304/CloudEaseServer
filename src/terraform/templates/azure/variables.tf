@@ -7,8 +7,7 @@ variable "tags" {
 variable "resource_group" {
   description = "Resource Group configuration"
   type = object({
-    name     = string
-    location = string
+    name = string
   })
 }
 
