@@ -1,4 +1,4 @@
-variable "storage_account_name" {
+variable "account_name" {
   type = string
 }
 
@@ -10,6 +10,6 @@ variable "location" {
   type = string
 }
 
-variable "container_name" {
+variable "database_name" {
   type = string
 }

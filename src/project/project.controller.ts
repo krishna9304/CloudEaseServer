@@ -6,6 +6,7 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -14,10 +15,16 @@ import { ProjectService } from './project.service';
 import { ApiResponse } from 'src/constants/apiResponse';
 import { CurrentUser } from 'src/users/current-user.decorator';
 import { User } from 'src/users/schemas/user.schema';
+import { RedisService } from 'src/terraform/services/redis.service';
+import { Response } from 'express';
+import { Readable } from 'stream';
 
 @Controller('project')
 export class ProjectController {
-  constructor(private readonly projectService: ProjectService) {}
+  constructor(
+    private readonly projectService: ProjectService,
+    private readonly redisService: RedisService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -122,5 +129,35 @@ export class ProjectController {
       null,
     );
     return res.getResponse();
+  }
+
+  @Get(':projectId/log-stream')
+  @UseGuards(JwtAuthGuard)
+  async logStream(@Param('projectId') projectId: string, @Res() res: Response) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const logs = await this.redisService.getLogs(
+      `${projectId}:terraform-progress`,
+    );
+    for (const log of logs) {
+      res.write(`data: ${JSON.stringify({ data: log })}\n\n`);
+    }
+
+    const callback = (message: string) => {
+      res.write(`data: ${JSON.stringify({ data: message })}\n\n`);
+    };
+
+    await this.redisService.subscribe(
+      `${projectId}:terraform-progress`,
+      callback,
+    );
+
+    res.on('close', async () => {
+      await this.redisService.unsubscribe(`${projectId}:terraform-progress`);
+      res.end();
+    });
   }
 }

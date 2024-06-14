@@ -19,6 +19,8 @@ export type AwsDetails = {
   accessKey: string;
   secretKey: string;
   region: string;
+  backendBucket: string;
+  backendKey: string;
 };
 
 export enum CloudProvider {

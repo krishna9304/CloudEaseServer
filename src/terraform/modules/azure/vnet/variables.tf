@@ -1,25 +1,15 @@
-variable "vnet_name" {
-  description = "Name of the virtual network"
-  type        = string
-}
-
-variable "address_space" {
-  description = "Address space for the virtual network"
-  type        = list(string)
-}
-
-variable "location" {
-  description = "Azure region"
-  type        = string
+variable "name" {
+  type = string
 }
 
 variable "resource_group_name" {
-  description = "Name of the resource group"
-  type        = string
+  type = string
 }
 
-variable "tags" {
-  description = "Tags for the virtual network"
-  type        = map(string)
-  default     = {}
+variable "location" {
+  type = string
+}
+
+variable "address_space" {
+  type = list(string)
 }

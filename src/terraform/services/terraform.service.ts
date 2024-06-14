@@ -1,9 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { exec } from 'child_process';
+import { Injectable, Logger } from '@nestjs/common';
+import { spawn } from 'child_process';
 import { RedisService } from './redis.service';
 import { EventsGateway } from './events.gateway';
 import { join } from 'path';
-import { existsSync, mkdirSync, rmdirSync } from 'fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'fs';
 import { CanvasEdge, CanvasNode } from 'src/project/schemas/design.schema';
 import {
   AwsDetails,
@@ -19,6 +26,8 @@ export class TerraformService {
     private readonly eventsGateway: EventsGateway,
   ) {}
 
+  private readonly logger = new Logger(TerraformService.name);
+
   setAzureCredentials(details: AzureDetails): void {
     process.env.ARM_CLIENT_ID = details.clientId;
     process.env.ARM_CLIENT_SECRET = details.clientSecret;
@@ -32,21 +41,33 @@ export class TerraformService {
     process.env.AWS_SECRET_ACCESS_KEY = details.secretKey;
   }
 
-  runCommand(command: string): Promise<void> {
+  runCommand(
+    command: string,
+    projectId: string,
+    userId: string,
+    stage: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const process = exec(command);
+      const process = spawn(command, { shell: true });
+      this.redisService.publish(
+        `${projectId}:terraform-progress`,
+        '\nStage: ' + stage + '\n',
+      );
 
-      process.stdout.on('data', (data) => {
-        this.redisService.publish('terraform-progress', data);
-        this.eventsGateway.sendMessage('terraform-progress', data);
-      });
+      const handleData = (data: any) => {
+        const message = data.toString();
+        this.redisService.publish(`${projectId}:terraform-progress`, message);
+        this.eventsGateway.sendMessage(
+          userId,
+          `${projectId}:terraform-progress`,
+          message,
+        );
+      };
 
-      process.stderr.on('data', (data) => {
-        this.redisService.publish('terraform-progress', data);
-        this.eventsGateway.sendMessage('terraform-progress', data);
-      });
+      process.stdout.on('data', handleData);
+      process.stderr.on('data', handleData);
 
-      process.on('exit', (code) => {
+      process.on('close', (code) => {
         if (code === 0) {
           resolve();
         } else {
@@ -56,28 +77,131 @@ export class TerraformService {
     });
   }
 
-  async runTerraformPipeline(): Promise<void> {
-    await this.runCommand('terraform init');
-    await this.runCommand('terraform validate');
-    await this.runCommand('terraform plan');
-    await this.runCommand('terraform apply -auto-approve');
+  async runTerraformPipeline(
+    workingDir: string,
+    project: Project,
+    rootDir: string,
+  ): Promise<void> {
+    try {
+      process.chdir(workingDir);
+      this.logger.debug('Initializing Terraform');
+      await this.runCommand(
+        'terraform init',
+        project.projectId,
+        project.userId,
+        '1. Initializing',
+      );
+    } catch (error) {
+      this.logger.error('Error initializing Terraform:', error);
+      return;
+    } finally {
+      process.chdir(rootDir);
+    }
+
+    try {
+      process.chdir(workingDir);
+      this.logger.debug('Validating Terraform');
+      await this.runCommand(
+        'terraform validate',
+        project.projectId,
+        project.userId,
+        '2. Validating',
+      );
+    } catch (error) {
+      this.logger.error('Error validating Terraform:', error);
+      return;
+    } finally {
+      process.chdir(rootDir);
+    }
+
+    try {
+      process.chdir(workingDir);
+      this.logger.debug('Planning Terraform');
+      await this.runCommand(
+        'terraform plan',
+        project.projectId,
+        project.userId,
+        '3. Planning',
+      );
+    } catch (error) {
+      this.logger.error('Error planning Terraform:', error);
+      return;
+    } finally {
+      process.chdir(rootDir);
+    }
+    // await this.runCommand('terraform apply -auto-approve');
   }
 
-  async prepareTerraformFiles(
+  prepareBackendTf(project: Project, tfDirectory: string): void {
+    const backendFilePath = join(tfDirectory, 'backend.tf');
+
+    let replaceMap: Record<string, string> = {};
+    if (project.cloudProvider === CloudProvider.Azure)
+      replaceMap = {
+        backendResourceGroup: project.azureDetails.backendResourceGroup,
+        backendStorageAccount: project.azureDetails.backendStorageAccount,
+        backendContainer: project.azureDetails.backendContainer,
+        backendKey: project.azureDetails.backendKey,
+      };
+    else
+      replaceMap = {
+        backendBucket: project.awsDetails.backendBucket,
+        backendKey: project.awsDetails.backendKey,
+      };
+
+    try {
+      let fileContent = readFileSync(backendFilePath, 'utf-8');
+      for (const [key, value] of Object.entries(replaceMap)) {
+        const regex = new RegExp(`<${key}>`, 'g');
+        fileContent = fileContent.replace(regex, value);
+      }
+      writeFileSync(backendFilePath, fileContent);
+    } catch (error) {
+      console.error('Error preparing backend.tf:', error);
+    }
+  }
+
+  prepareTerraformFiles(
     _nodes: CanvasNode[],
     _edges: CanvasEdge[],
     project: Project,
-  ): Promise<void> {
-    if (project.cloudProvider === CloudProvider.Azure)
-      this.setAzureCredentials(project.azureDetails);
-    else this.setAwsCredentials(project.awsDetails);
+  ): void {
+    const rootDir = process.cwd();
+    const tfDirectory = join(rootDir, 'tmp', 'terraform');
+    const tfTemplateDir = join(rootDir, 'src', 'terraform');
 
-    const tfDirectory = join(process.cwd(), 'tmp', 'terraform');
-    if (!existsSync(tfDirectory)) mkdirSync(tfDirectory, { recursive: true });
-    else {
-      rmdirSync(tfDirectory, { recursive: true, maxRetries: 3 });
-      mkdirSync(tfDirectory, { recursive: true });
+    if (project.cloudProvider === CloudProvider.Azure) {
+      this.setAzureCredentials(project.azureDetails);
+    } else {
+      this.setAwsCredentials(project.awsDetails);
     }
-    process.chdir(tfDirectory);
+
+    try {
+      if (existsSync(tfDirectory)) {
+        rmSync(tfDirectory, { recursive: true, force: true });
+      }
+      mkdirSync(tfDirectory, { recursive: true });
+
+      const templateDir = join(
+        tfTemplateDir,
+        'templates',
+        project.cloudProvider === CloudProvider.Azure ? 'azure' : 'aws',
+      );
+
+      cpSync(templateDir, tfDirectory, { recursive: true });
+      this.logger.debug('Prepared terraform templates');
+      this.prepareBackendTf(project, tfDirectory);
+      this.logger.debug('Prepared backend.tf');
+
+      if (project.cloudProvider === CloudProvider.Azure)
+        this.setAzureCredentials(project.azureDetails);
+      else this.setAwsCredentials(project.awsDetails);
+
+      this.runTerraformPipeline(tfDirectory, project, rootDir);
+    } catch (error) {
+      this.logger.error('Error preparing Terraform files', error);
+    } finally {
+      process.chdir(rootDir);
+    }
   }
 }
