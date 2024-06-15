@@ -166,4 +166,30 @@ export class ProjectController {
       res.end();
     });
   }
+
+  @Get(':projectId/download-tfzip')
+  @UseGuards(JwtAuthGuard)
+  async downloadTfZip(
+    @Param('projectId') projectId: string,
+    @Res() res: Response,
+  ) {
+    const zipStream =
+      await this.projectService.downloadTerraformFiles(projectId);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${projectId}.zip`,
+    );
+    res.setHeader('Content-Type', 'application/zip');
+
+    if (zipStream instanceof Readable) zipStream.pipe(res);
+    else {
+      const response = new ApiResponse(
+        'Error downloading file.',
+        null,
+        400,
+        null,
+      );
+      res.status(response.statusCode).json(response.getResponse());
+    }
+  }
 }

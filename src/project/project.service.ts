@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -9,6 +10,7 @@ import { Project } from './schemas/project.schema';
 import { DesignRepository } from './repositories/design.repository';
 import { Design } from './schemas/design.schema';
 import { TerraformService } from 'src/terraform/services/terraform.service';
+import { Readable } from 'stream';
 
 @Injectable()
 export class ProjectService {
@@ -155,5 +157,27 @@ export class ProjectService {
     const design = await this.designRepository.findOne({ projectId });
     const { nodes, edges } = design.components;
     this.terraformService.prepareTerraformFiles(nodes, edges, project);
+  }
+
+  async downloadTerraformFiles(projectId: string): Promise<Readable> {
+    const projectExists = await this.projectRepository.exists({ projectId });
+    if (!projectExists) {
+      throw new NotFoundException('Project not found. Invalid projectId.');
+    }
+    const project = await this.projectRepository.findOne({ projectId });
+    if (!project.published && !project.publishing) {
+      throw new BadRequestException(
+        'Project is not published yet. Deployment files are not available.',
+      );
+    }
+    const design = await this.designRepository.findOne({ projectId });
+    const { nodes, edges } = design.components;
+    const zipStream = this.terraformService.prepareTerraformFiles(
+      nodes,
+      edges,
+      project,
+      'download',
+    );
+    return zipStream as Readable;
   }
 }

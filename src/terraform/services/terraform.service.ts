@@ -19,6 +19,8 @@ import {
   Project,
 } from 'src/project/schemas/project.schema';
 import { ProjectRepository } from 'src/project/repositories/project.repository';
+import * as AdmZip from 'adm-zip';
+import { Readable } from 'stream';
 
 @Injectable()
 export class TerraformService {
@@ -292,9 +294,11 @@ export class TerraformService {
     nodes: CanvasNode[],
     edges: CanvasEdge[],
     project: Project,
-  ): void {
+    prepareType: string = 'publish',
+  ): Readable | void {
     const rootDir = process.cwd();
-    const tfDirectory = join(rootDir, 'tmp', 'terraform');
+    const tmpDir = join(rootDir, 'tmp');
+    const tfDirectory = join(tmpDir, 'terraform');
     const tfTemplateDir = join(rootDir, 'src', 'terraform');
 
     if (project.cloudProvider === CloudProvider.Azure) {
@@ -303,6 +307,7 @@ export class TerraformService {
       this.setAwsCredentials(project.awsDetails);
     }
 
+    let zStream: Readable;
     try {
       if (existsSync(tfDirectory)) {
         rmSync(tfDirectory, { recursive: true, force: true });
@@ -316,20 +321,33 @@ export class TerraformService {
       );
 
       cpSync(templateDir, tfDirectory, { recursive: true });
-      this.logger.debug('Prepared terraform templates');
       this.prepareBackendTf(project, tfDirectory);
-      this.logger.debug('Prepared backend.tf');
 
       if (project.cloudProvider === CloudProvider.Azure) {
         this.setAzureCredentials(project.azureDetails);
         this.prepareAzureTfJson(project, nodes, edges, tfDirectory, rootDir);
       } else this.setAwsCredentials(project.awsDetails);
 
-      this.runTerraformPipeline(tfDirectory, project, rootDir);
+      if (prepareType === 'publish') {
+        this.logger.debug(
+          `Generated terraform files for ${project.projectId}. Running Terraform pipeline now.`,
+        );
+        this.runTerraformPipeline(tfDirectory, project, rootDir);
+      } else {
+        const zip = new AdmZip();
+        zip.addLocalFolder(tfDirectory);
+        const zipBuffer = zip.toBuffer();
+        const zipStream = new Readable();
+        zipStream.push(zipBuffer);
+        zipStream.push(null);
+        zStream = zipStream;
+      }
     } catch (error) {
       this.logger.error('Error preparing Terraform files', error);
     } finally {
       process.chdir(rootDir);
+      rmSync(tmpDir, { recursive: true, force: true });
+      return zStream;
     }
   }
 }
