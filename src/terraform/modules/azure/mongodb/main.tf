@@ -4,6 +4,7 @@ resource "azurerm_cosmosdb_account" "cosmosdb" {
   resource_group_name = var.resource_group_name
   offer_type          = "Standard"
   kind                = "MongoDB"
+  tags                = var.tags
 
   capabilities {
     name = "EnableMongo"

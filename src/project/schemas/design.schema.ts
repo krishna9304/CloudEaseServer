@@ -6,6 +6,7 @@ export interface CanvasNode {
   id: string;
   type: string;
   resourceName: string;
+  config?: any;
   position: {
     x: number;
     y: number;

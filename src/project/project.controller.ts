@@ -120,15 +120,21 @@ export class ProjectController {
   async publishProject(
     @Param('projectId') projectId: string,
     @CurrentUser() user: User,
+    @Body() reqBody: any,
   ) {
-    await this.projectService.publishProject(projectId, user.email);
-    const res = new ApiResponse(
-      'Pipeline started. Your project is being published...',
-      null,
-      200,
-      null,
-    );
-    return res.getResponse();
+    try {
+      await this.projectService.publishProject(projectId, user.email, reqBody);
+      const res = new ApiResponse(
+        'Pipeline started. Your project is being published...',
+        null,
+        200,
+        null,
+      );
+      return res.getResponse();
+    } catch (error) {
+      const res = new ApiResponse(error.message, error, 400, null);
+      return res.getResponse();
+    }
   }
 
   @Get(':projectId/log-stream')

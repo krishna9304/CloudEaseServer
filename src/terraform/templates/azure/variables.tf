@@ -12,11 +12,12 @@ variable "vnet" {
 variable "subnet" {
   type = object({
     subnet_name      = string
+    vnet_name        = string
     address_prefixes = list(string)
   })
 }
 
-variable "vms" {
+variable "linux_vms" {
   type = map(object({
     vm_name          = string
     vm_size          = string
@@ -24,9 +25,10 @@ variable "vms" {
   }))
 }
 
-variable "cosmosdbs" {
+variable "mongodbs" {
   type = map(object({
-    cosmosdb_name = string
+    mongodb_name  = string
+    database_name = string
   }))
 }
 
@@ -37,10 +39,6 @@ variable "storage_accounts" {
 }
 
 variable "admin_username" {
-  type = string
-}
-
-variable "admin_password" {
   type = string
 }
 

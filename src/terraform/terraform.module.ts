@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TerraformService } from './services/terraform.service';
 import { RedisService } from './services/redis.service';
 import { EventsGateway } from './services/events.gateway';
 import { ConfigModule } from '@nestjs/config';
 import * as Joi from 'joi';
+import { ProjectModule } from 'src/project/project.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import * as Joi from 'joi';
       }),
       envFilePath: '.env',
     }),
+    forwardRef(() => ProjectModule),
   ],
   providers: [TerraformService, RedisService, EventsGateway],
   exports: [TerraformService, RedisService, EventsGateway],

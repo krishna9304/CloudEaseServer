@@ -30,3 +30,7 @@ variable "public_ip_id" {
   type    = string
   default = null
 }
+
+variable "tags" {
+  type = map(string)
+}

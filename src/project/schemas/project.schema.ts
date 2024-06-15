@@ -51,6 +51,12 @@ export class Project extends AbstractDocument {
   @Prop({ default: null, type: Object })
   awsDetails: AwsDetails;
 
+  @Prop({ default: false })
+  published: boolean;
+
+  @Prop({ default: false })
+  publishing: boolean;
+
   @Prop({ default: [] })
   tags: Array<string>;
 

@@ -14,4 +14,14 @@ export class DesignRepository extends AbstractRepository<Design> {
   ) {
     super(designModel, connection);
   }
+
+  async bulkWrite(operations: any[]): Promise<void> {
+    try {
+      await this.model.bulkWrite(operations);
+      this.logger.log('Bulk write operation successful');
+    } catch (error) {
+      this.logger.error('Bulk write operation failed', error);
+      throw error;
+    }
+  }
 }

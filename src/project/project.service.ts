@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProjectRepository } from './repositories/project.repository';
 import { ProjectDto } from './dto/project.dto';
 import { Project } from './schemas/project.schema';
@@ -18,7 +22,6 @@ export class ProjectService {
     project: Project;
     design: Design;
   }> {
-    
     const project = await this.projectRepository.create(reqBody);
     const design = await this.designRepository.create({
       projectId: project.projectId,
@@ -45,11 +48,25 @@ export class ProjectService {
   }
 
   async updateDesign(designId: string, reqBody: any): Promise<Design> {
-    const design = await this.designRepository.findOneAndUpdate(
+    const designExists = await this.designRepository.exists({ designId });
+    if (!designExists) {
+      throw new NotFoundException('Design not found. Invalid designId.');
+    }
+    const design = await this.designRepository.findOne({ designId });
+    const project = await this.projectRepository.findOne({
+      projectId: design.projectId,
+    });
+
+    if (project.publishing || project.published) {
+      throw new ForbiddenException(
+        'DesignLocked: Design cannot be updated. Project is being published or already published.',
+      );
+    }
+    const updatedDesign = await this.designRepository.findOneAndUpdate(
       { designId },
       reqBody,
     );
-    return design;
+    return updatedDesign;
   }
 
   async getProjects(
@@ -93,7 +110,16 @@ export class ProjectService {
     return design;
   }
 
-  async publishProject(projectId: string, userId: string): Promise<void> {
+  async publishProject(
+    projectId: string,
+    userId: string,
+    nodeDetails: {
+      [key: string]: {
+        label: string;
+        [key: string]: string;
+      };
+    },
+  ): Promise<void> {
     const projectExists = await this.projectRepository.exists({
       projectId,
       userId,
@@ -102,6 +128,30 @@ export class ProjectService {
       throw new NotFoundException('Project not found. Invalid projectId.');
     }
     const project = await this.projectRepository.findOne({ projectId });
+
+    if (project.publishing) {
+      throw new Error('Project is already being published. Please wait.');
+    }
+    const bulkOps = Object.keys(nodeDetails).map((key) => {
+      return {
+        updateOne: {
+          filter: {
+            'components.nodes.id': key,
+            projectId: project.projectId,
+          },
+          update: { $set: { 'components.nodes.$.config': nodeDetails[key] } },
+        },
+      };
+    });
+
+    if (bulkOps.length > 0) {
+      await this.designRepository.bulkWrite(bulkOps);
+    }
+
+    await this.projectRepository.findOneAndUpdate(
+      { projectId: project.projectId },
+      { publishing: true },
+    );
     const design = await this.designRepository.findOne({ projectId });
     const { nodes, edges } = design.components;
     this.terraformService.prepareTerraformFiles(nodes, edges, project);

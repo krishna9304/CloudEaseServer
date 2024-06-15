@@ -18,15 +18,18 @@ import {
   CloudProvider,
   Project,
 } from 'src/project/schemas/project.schema';
+import { ProjectRepository } from 'src/project/repositories/project.repository';
 
 @Injectable()
 export class TerraformService {
   constructor(
     private readonly redisService: RedisService,
     private readonly eventsGateway: EventsGateway,
+    private readonly projectRepository: ProjectRepository,
   ) {}
 
   private readonly logger = new Logger(TerraformService.name);
+  private tfConfig: Record<string, any> = {};
 
   setAzureCredentials(details: AzureDetails): void {
     process.env.ARM_CLIENT_ID = details.clientId;
@@ -92,6 +95,10 @@ export class TerraformService {
         '1. Initializing',
       );
     } catch (error) {
+      await this.projectRepository.findOneAndUpdate(
+        { projectId: project.projectId },
+        { publishing: false },
+      );
       this.logger.error('Error initializing Terraform:', error);
       return;
     } finally {
@@ -108,6 +115,10 @@ export class TerraformService {
         '2. Validating',
       );
     } catch (error) {
+      await this.projectRepository.findOneAndUpdate(
+        { projectId: project.projectId },
+        { publishing: false },
+      );
       this.logger.error('Error validating Terraform:', error);
       return;
     } finally {
@@ -124,12 +135,58 @@ export class TerraformService {
         '3. Planning',
       );
     } catch (error) {
+      await this.projectRepository.findOneAndUpdate(
+        { projectId: project.projectId },
+        { publishing: false },
+      );
       this.logger.error('Error planning Terraform:', error);
       return;
     } finally {
       process.chdir(rootDir);
     }
-    // await this.runCommand('terraform apply -auto-approve');
+
+    try {
+      process.chdir(workingDir);
+      this.logger.debug('Applying Terraform');
+      await this.runCommand(
+        'terraform apply -auto-approve',
+        project.projectId,
+        project.userId,
+        '4. Applying the plan',
+      );
+      await this.projectRepository.findOneAndUpdate(
+        { projectId: project.projectId },
+        { published: true, publishing: false },
+      );
+
+      const finalEventsToPublish = {
+        admin_username: this.tfConfig.admin_username,
+        location: this.tfConfig.location,
+        resource_group: this.tfConfig.resource_group,
+        stateFileKey:
+          project.cloudProvider === CloudProvider.Azure
+            ? project.azureDetails.backendKey
+            : 'terraform.tfstate',
+      };
+
+      this.redisService.publish(
+        `${project.projectId}:terraform-progress`,
+        `\n\n\x1b[36mYay! Pipeline executed successfully. Below are the deployment details, please take a note of it:\n\n`,
+      );
+      Object.keys(finalEventsToPublish).forEach((key) => {
+        this.redisService.publish(
+          `${project.projectId}:terraform-progress`,
+          `\x1b[36m${key} => ${finalEventsToPublish[key]}\n`,
+        );
+      });
+    } catch (error) {
+      await this.projectRepository.findOneAndUpdate(
+        { projectId: project.projectId },
+        { publishing: false },
+      );
+      this.logger.error('Error applying Terraform:', error);
+      return;
+    }
   }
 
   prepareBackendTf(project: Project, tfDirectory: string): void {
@@ -161,9 +218,79 @@ export class TerraformService {
     }
   }
 
-  prepareTerraformFiles(
-    _nodes: CanvasNode[],
+  prepareAzureTfJson(
+    project: Project,
+    nodes: CanvasNode[],
     _edges: CanvasEdge[],
+    tfDirectory: string,
+    rootDir: string,
+  ) {
+    const mappingsFilePath = join(
+      rootDir,
+      'src',
+      'terraform',
+      'constants',
+      'mappings.json',
+    );
+    const mappingJson = JSON.parse(readFileSync(mappingsFilePath, 'utf-8'));
+
+    const tfJsonPath = join(tfDirectory, 'terraform.tfvars.json');
+    const tfJson = JSON.parse(readFileSync(tfJsonPath, 'utf-8'));
+
+    const resourceNamingConvention = (name: string, resourceType: string) => {
+      return `${name.replace(/ /g, '-').toLowerCase()}-${resourceType}`;
+    };
+    this.tfConfig = {
+      tags: {
+        project: project.projectName,
+        environment: 'dev',
+        provisioner: 'cloudease',
+      },
+      vnet: {
+        vnet_name: resourceNamingConvention(project.projectName, 'vnet'),
+        address_space: ['10.0.0.0/16'],
+      },
+      subnet: {
+        subnet_name: resourceNamingConvention(project.projectName, 'subnet'),
+        vnet_name: resourceNamingConvention(project.projectName, 'vnet'),
+        address_prefixes: ['10.0.1.0/24'],
+      },
+      linux_vms: {},
+      mongodbs: {},
+      storage_accounts: {},
+      admin_username: tfJson.admin_username,
+      location:
+        project.cloudProvider === CloudProvider.Azure
+          ? project.azureDetails.region
+          : project.awsDetails.region,
+      resource_group: resourceNamingConvention(project.projectName, 'rg'),
+    };
+
+    let vm_count = 1;
+    let mongodb_count = 1;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const nodeType = mappingJson[project.cloudProvider][node.resourceName];
+      if (nodeType === 'linux_vm') {
+        this.tfConfig.linux_vms[nodeType + '_' + vm_count++] = {
+          vm_name: node.config['appName'],
+          vm_size: node.config['vmSize'] || 'Standard_B1s',
+          create_public_ip: node.config['publicIp'] === 'true',
+        };
+      } else if (nodeType === 'mongodb') {
+        this.tfConfig.mongodbs[nodeType + '_' + mongodb_count++] = {
+          mongodb_name: node.config['accountName'],
+          database_name: node.config['dbName'],
+        };
+      }
+    }
+
+    writeFileSync(tfJsonPath, JSON.stringify(this.tfConfig, null, 2));
+  }
+
+  prepareTerraformFiles(
+    nodes: CanvasNode[],
+    edges: CanvasEdge[],
     project: Project,
   ): void {
     const rootDir = process.cwd();
@@ -193,9 +320,10 @@ export class TerraformService {
       this.prepareBackendTf(project, tfDirectory);
       this.logger.debug('Prepared backend.tf');
 
-      if (project.cloudProvider === CloudProvider.Azure)
+      if (project.cloudProvider === CloudProvider.Azure) {
         this.setAzureCredentials(project.azureDetails);
-      else this.setAwsCredentials(project.awsDetails);
+        this.prepareAzureTfJson(project, nodes, edges, tfDirectory, rootDir);
+      } else this.setAwsCredentials(project.awsDetails);
 
       this.runTerraformPipeline(tfDirectory, project, rootDir);
     } catch (error) {

@@ -7,6 +7,7 @@ module "resource_group" {
   source   = "../../src/terraform/modules/azure/resource_group"
   name     = var.resource_group
   location = var.location
+  tags     = var.tags
 }
 
 module "vnet" {
@@ -15,6 +16,7 @@ module "vnet" {
   resource_group_name = module.resource_group.name
   location            = var.location
   address_space       = var.vnet.address_space
+  tags                = var.tags
 }
 
 module "subnet" {
@@ -27,10 +29,11 @@ module "subnet" {
 
 module "public_ip" {
   source              = "../../src/terraform/modules/azure/public_ip"
-  for_each            = var.vms
+  for_each            = var.linux_vms
   name                = each.value.vm_name
   resource_group_name = module.resource_group.name
   location            = var.location
+  tags                = var.tags
 }
 
 module "storage" {
@@ -40,20 +43,22 @@ module "storage" {
   resource_group_name  = module.resource_group.name
   location             = var.location
   container_name       = "default"
+  tags                 = var.tags
 }
 
-module "cosmosdb" {
+module "mongodb" {
   source              = "../../src/terraform/modules/azure/mongodb"
-  for_each            = var.cosmosdbs
-  account_name        = each.value.cosmosdb_name
+  for_each            = var.mongodbs
+  account_name        = each.value.mongodb_name
   resource_group_name = module.resource_group.name
   location            = var.location
-  database_name       = "default"
+  database_name       = each.value.database_name
+  tags                = var.tags
 }
 
-module "vm" {
+module "linux_vm" {
   source              = "../../src/terraform/modules/azure/linux_vm"
-  for_each            = var.vms
+  for_each            = var.linux_vms
   vm_name             = each.value.vm_name
   resource_group_name = module.resource_group.name
   location            = var.location
@@ -62,4 +67,5 @@ module "vm" {
   ssh_public_key      = file("./tfkey.pub")
   subnet_id           = module.subnet.id
   public_ip_id        = each.value.create_public_ip ? module.public_ip[each.key].id : null
+  tags                = var.tags
 }

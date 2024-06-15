@@ -38,6 +38,12 @@ export class ProjectDto {
 
   awsDetails: AwsDetails;
 
+  @IsEmpty()
+  published: boolean;
+
+  @IsEmpty()
+  publishing: boolean;
+
   @IsArray()
   tags: Array<string>;
 

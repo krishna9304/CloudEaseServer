@@ -13,3 +13,7 @@ variable "location" {
 variable "container_name" {
   type = string
 }
+
+variable "tags" {
+  type = map(string)
+}

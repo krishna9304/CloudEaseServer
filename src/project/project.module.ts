@@ -16,5 +16,6 @@ import { TerraformModule } from 'src/terraform/terraform.module';
   ],
   controllers: [ProjectController],
   providers: [ProjectService, ProjectRepository, DesignRepository],
+  exports: [ProjectRepository],
 })
 export class ProjectModule {}
