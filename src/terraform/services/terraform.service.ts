@@ -188,6 +188,8 @@ export class TerraformService {
       );
       this.logger.error('Error applying Terraform:', error);
       return;
+    } finally {
+      process.chdir(rootDir);
     }
   }
 
@@ -310,9 +312,11 @@ export class TerraformService {
     let zStream: Readable;
     try {
       if (existsSync(tfDirectory)) {
-        rmSync(tfDirectory, { recursive: true, force: true });
+        if (prepareType === 'publish')
+          rmSync(tfDirectory, { recursive: true, force: true });
       }
-      mkdirSync(tfDirectory, { recursive: true });
+
+      if (!existsSync(tfDirectory)) mkdirSync(tfDirectory, { recursive: true });
 
       const templateDir = join(
         tfTemplateDir,
@@ -346,7 +350,6 @@ export class TerraformService {
       this.logger.error('Error preparing Terraform files', error);
     } finally {
       process.chdir(rootDir);
-      rmSync(tmpDir, { recursive: true, force: true });
       return zStream;
     }
   }
